@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot with Gemini API</title>
+    <!-- MIT License: This code is provided under the MIT License. -->
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f8f9fa;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+        #chat-messages {
+            flex-grow: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            height: 400px; /* Fixed height for chat scroll area */
+            background-color: #e9ecef;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .message {
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            max-width: 75%;
+            word-wrap: break-word;
+        }
+        .message.user {
+            background-color: #0d6efd;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.bot {
+            background-color: #f0f2f5;
+            color: #212529;
+            margin-right: auto;
+            text-align: left;
+        }
+        #typing-indicator {
+            font-style: italic;
+            color: #6c757d;
+            padding: 0.5rem 1rem;
+            display: none; /* Hidden by default */
+        }
+        .api-key-section {
+            padding: 1rem;
+            background-color: #f0f2f5;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .input-area {
+            padding: 1rem;
+            display: flex;
+        }
+        .input-area #user-input {
+            flex-grow: 1;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <header class="p-3 bg-primary text-white text-center rounded-top">
+            <h1 class="h4 mb-0">Gemini AI Chatbot</h1>
+        </header>
+
+        <section class="api-key-section">
+            <div class="input-group mb-2">
+                <input type="password" id="api-key-input" class="form-control" placeholder="Enter your Google Gemini API key">
+                <button class="btn btn-success" id="set-api-btn">Set API Key</button>
+            </div>
+            <div id="api-status" class="text-center small">API Key Status: Not set</div>
+        </section>
+
+        <main id="chat-messages"></main>
+
+        <div id="typing-indicator" class="px-3 py-2">AI is typing...</div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" class="form-control" placeholder="Type your message..." disabled>
+            <button class="btn btn-primary" id="send-btn" disabled>Send</button>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS (optional, for components like collapse, dropdowns) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    <script>
+        // DOM Elements
+        const apiKeyInput = document.querySelector("#api-key-input");
+        const setApiBtn = document.querySelector("#set-api-btn");
+        const apiStatus = document.querySelector("#api-status");
+        const chatMessages = document.querySelector("#chat-messages");
+        const userInput = document.querySelector("#user-input");
+        const sendBtn = document.querySelector("#send-btn");
+        const typingIndicator = document.querySelector("#typing-indicator");
+
+        // Constants
+        const GEMINI_API_KEY_STORAGE_KEY = "GEMINI_API_KEY";
+        const GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+
+        let geminiApiKey = "";
+
+        /**
+         * Initializes the application state based on stored API key.
+         */
+        document.addEventListener("DOMContentLoaded", () => {
+            loadApiKey();
+            updateApiStatus();
+
+            // Event listeners
+            setApiBtn.addEventListener("click", saveApiKey);
+            sendBtn.addEventListener("click", handleSendMessage);
+            userInput.addEventListener("keypress", (event) => {
+                if (event.key === "Enter" && !sendBtn.disabled) {
+                    handleSendMessage();
+                }
+            });
+
+            // Initial greeting message
+            addMessage("bot", "Hello! I am an AI assistant powered by Google Gemini. Please enter your API key to start chatting.");
+        });
+
+        /**
+         * Loads the API key from localStorage.
+         */
+        function loadApiKey() {
+            geminiApiKey = localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || "";
+            apiKeyInput.value = geminiApiKey; // Pre-fill input if key exists
+        }
+
+        /**
+         * Saves the API key to localStorage and updates UI.
+         */
+        function saveApiKey() {
+            const newKey = apiKeyInput.value.trim();
+            if (newKey) {
+                localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, newKey);
+                geminiApiKey = newKey;
+                alert("API Key saved successfully!");
+            } else {
+                localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+                geminiApiKey = "";
+                alert("API Key cleared.");
+            }
+            updateApiStatus();
+        }
+
+        /**
+         * Updates the API key status and enables/disables chat input.
+         */
+        function updateApiStatus() {
+            if (geminiApiKey) {
+                apiStatus.textContent = "API Key Status: Set (Ready to chat)";
+                apiStatus.classList.remove("text-danger");
+                apiStatus.classList.add("text-success");
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                apiStatus.textContent = "API Key Status: Not set (Chat disabled)";
+                apiStatus.classList.remove("text-success");
+                apiStatus.classList.add("text-danger");
+                userInput.disabled = true;
+                sendBtn.disabled = true;
+            }
+        }
+
+        /**
+         * Appends a message to the chat display.
+         * @param {string} sender - 'user' or 'bot'.
+         * @param {string} text - The message content.
+         */
+        function addMessage(sender, text) {
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("message", sender);
+            messageElement.innerHTML = text.replace(/\n/g, '<br>'); // Preserve newlines
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll to latest message
+        }
+
+        /**
+         * Shows the typing indicator.
+         */
+        function showTypingIndicator() {
+            typingIndicator.style.display = "block";
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Scroll to show indicator
+        }
+
+        /**
+         * Hides the typing indicator.
+         */
+        function hideTypingIndicator() {
+            typingIndicator.style.display = "none";
+        }
+
+        /**
+         * Handles sending a message: displays user message, calls API, displays bot response.
+         */
+        async function handleSendMessage() {
+            const messageText = userInput.value.trim();
+            if (!messageText) return;
+
+            addMessage("user", messageText);
+            userInput.value = ""; // Clear input field
+            userInput.disabled = true; // Disable input during API call
+            sendBtn.disabled = true;
+
+            showTypingIndicator();
+
+            try {
+                const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${geminiApiKey}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: messageText
+                            }]
+                        }]
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} ${response.statusText} - ${errorData.error ? errorData.error.message : 'Unknown error'}`);
+                }
+
+                const data = await response.json();
+                const botResponse = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text
+                                    ? data.candidates[0].content.parts[0].text
+                                    : "Sorry, I couldn't get a response from the AI.";
+
+                addMessage("bot", botResponse);
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                addMessage("bot", `<span class="text-danger">Error: ${error.message}. Please check your API key and network connection.</span>`);
+            } finally {
+                hideTypingIndicator();
+                userInput.disabled = false; // Re-enable input
+                sendBtn.disabled = false;
+                userInput.focus(); // Focus back to input
+            }
+        }
+    </script>
+</body>
+</html>
